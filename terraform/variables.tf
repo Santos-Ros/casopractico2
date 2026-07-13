@@ -6,10 +6,12 @@ variable "resource_group_name" {
 
 variable "location" {
   description = "Región de Azure donde desplegar los recursos."
+  type        = string
+  default     = "swedencentral"
 }
 
 variable "subscription_id" {
-  description = "ID de suscripción de Azure. Déjalo en null para usar la suscripción activa de `az login` (no hace falta terraform.tfvars)"
+  description = "ID de suscripción de Azure. Déjalo en null para usar la suscripción activa de az login (no hace falta terraform.tfvars)"
   type        = string
   default     = null
 }
