@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flaskapp
+  namespace: motoapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flaskapp
+  template:
+    metadata:
+      labels:
+        app: flaskapp
+    spec:
+      containers:
+        - name: flaskapp
+          image: "{{ acr_login_server }}/encuesta-moto:casopractico2"
+          ports:
+            - containerPort: 5000
+          env:
+            - name: DB_HOST
+              value: "{{ db_host | default('postgres') }}"
+            - name: DB_NAME
+              value: "{{ db_name }}"
+            - name: DB_USER
+              value: "{{ db_user }}"
+            - name: DB_PASSWORD
+              value: "{{ db_password }}"
+      imagePullSecrets:
+        - name: acr-secret

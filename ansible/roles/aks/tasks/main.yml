@@ -1,0 +1,88 @@
+---
+- name: Instalar dependencia Python (kubernetes) para los módulos kubernetes.core
+  ansible.builtin.pip:
+    name: kubernetes
+    extra_args: "--user --break-system-packages"
+  become: false
+
+- name: Crear namespace motoapp en AKS
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: v1
+    kind: Namespace
+    name: motoapp
+    state: present
+
+- name: Provisionar credenciales del ACR como Secret K8s
+  import_tasks: acr-secret.yml
+
+- name: Reservar volumen persistente para PostgreSQL
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    namespace: motoapp
+    definition: "{{ lookup('file', 'roles/aks/files/pvc-postgres.yml') | from_yaml }}"
+
+- name: Desplegar base de datos PostgreSQL
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    namespace: motoapp
+    definition: "{{ lookup('template', 'roles/aks/templates/deployment-postgres.yml.j2') | from_yaml }}"
+
+- name: Exponer PostgreSQL internamente (ClusterIP headless)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    namespace: motoapp
+    definition: "{{ lookup('file', 'roles/aks/files/service-postgres.yml') | from_yaml }}"
+
+- name: Desplegar app de encuesta moto
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    namespace: motoapp
+    definition: "{{ lookup('template', 'roles/aks/templates/deployment-encuesta.yml.j2') | from_yaml }}"
+
+- name: Exponer app de encuesta a Internet (LoadBalancer)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    namespace: motoapp
+    definition: "{{ lookup('file', 'roles/aks/files/service-encuesta.yml') | from_yaml }}"
+
+- name: Esperar readiness del pod de la encuesta
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: v1
+    kind: Pod
+    namespace: motoapp
+    label_selectors:
+      - app=flaskapp
+  register: flask_pods
+  until: flask_pods.resources[0].status.containerStatuses[0].ready is defined and flask_pods.resources[0].status.containerStatuses[0].ready
+  retries: 30
+  delay: 10
+
+- name: Consultar IP pública asignada al servicio (con reintentos, el LB tarda en aprovisionar)
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: v1
+    kind: Service
+    namespace: motoapp
+    name: flaskapp-service
+  register: flask_service_info
+  until: >
+    flask_service_info.resources[0].status.loadBalancer.ingress is defined and
+    flask_service_info.resources[0].status.loadBalancer.ingress | length > 0
+  retries: 30
+  delay: 10
+
+- name: Registrar IP pública como hecho de Ansible
+  set_fact:
+    flaskapp_external_ip: "{{ flask_service_info.resources[0].status.loadBalancer.ingress[0].ip }}"
+
+- name: Imprimir URL final de acceso a la encuesta
+  debug:
+    msg: "Tu app está disponible en: http://{{ flaskapp_external_ip }}"
+
+- name: Guardar IP de la encuesta para el resumen final de deploy.sh
+  ansible.builtin.copy:
+    dest: "{{ playbook_dir }}/.encuesta_external_ip"
+    content: "{{ flaskapp_external_ip }}"
+    mode: "0644"

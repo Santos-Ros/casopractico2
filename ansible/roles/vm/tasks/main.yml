@@ -1,0 +1,94 @@
+---
+- name: Sincronizar índice de paquetes APT
+  apt:
+    update_cache: yes
+  become: true
+
+- name: Instalar el motor de contenedores Podman
+  apt:
+    name: podman
+    state: present
+  become: true
+
+- name: Instalar dependencia Python (passlib) para el módulo htpasswd
+  apt:
+    name: python3-passlib
+    state: present
+  become: true
+
+- name: Crear directorio de credenciales TLS en la VM
+  ansible.builtin.file:
+    path: /opt/casopractico2/ssl
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: Generar clave privada RSA (TLS)
+  community.crypto.openssl_privatekey:
+    path: /opt/casopractico2/ssl/key.pem
+    type: RSA
+    size: 2048
+  become: true
+
+- name: Generar CSR para el certificado TLS
+  community.crypto.openssl_csr:
+    path: /opt/casopractico2/ssl/cert.csr
+    privatekey_path: /opt/casopractico2/ssl/key.pem
+    common_name: "casopractico2.local"
+  become: true
+
+- name: Firmar certificado x.509 autofirmado
+  community.crypto.x509_certificate:
+    path: /opt/casopractico2/ssl/cert.pem
+    privatekey_path: /opt/casopractico2/ssl/key.pem
+    csr_path: /opt/casopractico2/ssl/cert.csr
+    provider: selfsigned
+  become: true
+
+- name: Dar de alta el usuario de acceso en .htpasswd
+  community.general.htpasswd:
+    path: /opt/casopractico2/ssl/.htpasswd
+    name: "{{ web_auth_user }}"
+    password: "{{ web_auth_password }}"
+    crypt_scheme: bcrypt
+    mode: "0644"
+  become: true
+
+- name: Autenticar Podman (VM remota) en el ACR
+  containers.podman.podman_login:
+    registry: "{{ acr_login_server }}"
+    username: "{{ acr_username }}"
+    password: "{{ acr_password }}"
+
+- name: Descargar imagen webserver:casopractico2 desde el ACR
+  containers.podman.podman_image:
+    name: "{{ acr_login_server }}/webserver"
+    tag: "casopractico2"
+    pull: true
+
+- name: Ejecutar contenedor web y generar unidad systemd
+  containers.podman.podman_container:
+    name: web-casopractico2
+    image: "{{ acr_login_server }}/webserver:casopractico2"
+    state: started
+    ports:
+      - "443:443"
+    volumes:
+      - /opt/casopractico2/ssl:/usr/local/apache2/conf/ssl:Z
+    generate_systemd:
+      path: /etc/systemd/system
+      restart_policy: always
+      names: true
+  become: true
+
+- name: Recargar demonio systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+
+- name: Habilitar arranque automático del servicio web tras reinicio
+  ansible.builtin.systemd:
+    name: "container-web-casopractico2.service"
+    enabled: true
+    state: started
+  become: true

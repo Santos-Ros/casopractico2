@@ -1,0 +1,53 @@
+---
+- name: Crear directorio de configuración de Podman del usuario
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/.config/containers"
+    state: directory
+    mode: "0755"
+
+- name: Asegurar configuración mínima de registries.conf (nivel usuario, sin root)
+  ansible.builtin.copy:
+    dest: "{{ ansible_env.HOME }}/.config/containers/registries.conf"
+    content: |
+      unqualified-search-registries = ["docker.io"]
+    force: false
+    mode: "0644"
+
+- name: Autenticar Podman (nodo de control) en el ACR
+  containers.podman.podman_login:
+    registry: "{{ acr_login_server }}"
+    username: "{{ acr_username }}"
+    password: "{{ acr_password }}"
+
+- name: Construir y publicar imagen webserver:casopractico2
+  containers.podman.podman_image:
+    name: "{{ acr_login_server }}/webserver"
+    tag: "casopractico2"
+    path: "{{ role_path }}/files/webserver"
+    push: true
+    force: true
+    build:
+      format: docker
+      extra_args: "--no-cache"
+
+- name: Purgar imagen local obsoleta de encuesta-moto antes del build
+  containers.podman.podman_image:
+    name: "{{ acr_login_server }}/encuesta-moto"
+    tag: "casopractico2"
+    state: absent
+  ignore_errors: true
+
+- name: Construir y publicar imagen encuesta-moto:casopractico2
+  containers.podman.podman_image:
+    name: "{{ acr_login_server }}/encuesta-moto"
+    tag: "casopractico2"
+    path: "{{ role_path }}/files/encuesta-moto"
+    push: true
+    force: true
+    build:
+      format: docker
+      extra_args: "--no-cache"
+
+- name: Purgar imágenes sin etiquetar (nodo de control)
+  containers.podman.podman_prune:
+    image: true

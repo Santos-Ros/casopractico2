@@ -1,0 +1,39 @@
+# Archivos sensibles
+*.pem
+*.key
+*.crt
+*.env
+*.vault
+secrets.yml
+group_vars/secrets.yml
+*.json
+*.base64
+# Terraform
+*.tfstate
+*.tfstate.backup
+.terraform/
+terraform.tfvars
+# Archivos de salida o temporales
+output.txt
+*.log
+*.retry
+# Configuraciones locales de editores
+.idea/
+.vscode/
+*.swp
+*.swo
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+# Archivos de sistema
+*.bak
+.DS_Store
+Thumbs.db
+# Inventario generado dinámicamente (contiene IP real del despliegue)
+ansible/hosts
+# Kubeconfig generado dinámicamente (contiene credenciales del clúster)
+ansible/kubeconfig
+ansible/.encuesta_external_ip

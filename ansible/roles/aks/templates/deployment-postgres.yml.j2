@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: motoapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: "{{ db_name }}"
+            - name: POSTGRES_USER
+              value: "{{ db_user }}"
+            - name: POSTGRES_PASSWORD
+              value: "{{ db_password }}"
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata/data
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data/pgdata
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: postgres-pvc

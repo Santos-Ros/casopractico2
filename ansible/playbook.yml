@@ -1,0 +1,37 @@
+---
+- name: Construir y subir imágenes al ACR
+  hosts: localhost
+  vars_files:
+    - group_vars/secrets.yml
+  roles:
+    - role: acr
+  tags: acr
+
+- name: Esperar a que la VM esté accesible por SSH
+  hosts: vm
+  gather_facts: false
+  vars:
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+  tasks:
+    - name: Esperar conexión SSH
+      ansible.builtin.wait_for_connection:
+        timeout: 180
+
+- name: Configurar VM y desplegar web moto (Apache+TLS)
+  hosts: vm
+  become: true
+  vars_files:
+    - group_vars/secrets.yml
+  vars:
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+  roles:
+    - role: vm
+  tags: vm
+
+- name: Desplegar encuesta moto en AKS (PostgreSQL persistente)
+  hosts: localhost
+  vars_files:
+    - group_vars/secrets.yml
+  roles:
+    - role: aks
+  tags: aks
